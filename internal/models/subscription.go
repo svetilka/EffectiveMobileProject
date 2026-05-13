@@ -33,8 +33,10 @@ type UpdateSubscriptionRequest struct {
 }
 
 type SubscriptionFilter struct {
-	UserID      string `form:"user_id"`
-	ServiceName string `form:"service_name"`
+	UserID      *uuid.UUID `form:"user_id"`
+	ServiceName *string    `form:"service_name"`
+	StartDate   *time.Time `form:"start_date"`
+	EndDate     *time.Time `form:"end_date"`
 }
 
 type PeriodRequest struct {

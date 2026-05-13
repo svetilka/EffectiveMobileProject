@@ -1,18 +1,20 @@
 package main
 
 import (
-	//"net/http"
 	"fmt"
 
+	handlers "github.com/svetilka/EffectiveMobileProject/internal/api"
 	"github.com/svetilka/EffectiveMobileProject/internal/config"
 	"github.com/svetilka/EffectiveMobileProject/internal/database"
-	"github.com/svetilka/EffectiveMobileProject/internal/handlers"
 	"github.com/svetilka/EffectiveMobileProject/internal/repository"
 
 	_ "github.com/svetilka/EffectiveMobileProject/docs"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
+
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func main() {
@@ -40,7 +42,7 @@ func main() {
 
 	// Setup repository and handler
 	repo := repository.NewSubscriptionRepository(db.DB)
-	handler := handlers.NewSubscriptionHandler(repo)
+	handler := handlers.NewHandler(repo)
 
 	// Setup router
 	router := setupRouter(handler)
@@ -54,7 +56,7 @@ func main() {
 	}
 }
 
-func setupRouter(handler *handlers.SubscriptionHandler) *gin.Engine {
+func setupRouter(handler *handlers.Handler) *gin.Engine {
 	router := gin.Default()
 
 	// Add logging middleware
@@ -84,6 +86,8 @@ func setupRouter(handler *handlers.SubscriptionHandler) *gin.Engine {
 		}).Info("Request completed")
 	})
 
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
 	// API routes
 	api := router.Group("/api/v1")
 	{
@@ -103,14 +107,5 @@ func setupRouter(handler *handlers.SubscriptionHandler) *gin.Engine {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
-	setupSwagger(router)
-
 	return router
-}
-
-func setupSwagger(router *gin.Engine) {
-	// Simple swagger UI redirect
-	router.GET("/swagger/*any", func(c *gin.Context) {
-		c.String(200, "Swagger documentation available at /docs/swagger.yaml")
-	})
 }

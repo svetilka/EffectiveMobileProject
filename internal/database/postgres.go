@@ -2,14 +2,14 @@ package database
 
 import (
 	"fmt"
-	"io/ioutil"
-	"strings"
 
 	"github.com/svetilka/EffectiveMobileProject/internal/config"
-	"github.com/svetilka/EffectiveMobileProject/internal/models"
 
+	"github.com/golang-migrate/migrate/v4"
+	migratepostgres "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	log "github.com/sirupsen/logrus"
-	"gorm.io/driver/postgres"
+	"gorm.io/driver/postgres" // драйвер для GORM
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -43,41 +43,37 @@ func NewDatabase(cfg *config.Config) (*DB, error) {
 }
 
 func (db *DB) RunMigrations() error {
-	log.Info("Running database migrations")
+	log.Info("Running database migrations via golang-migrate")
 
-	// Auto migrate
-	if err := db.AutoMigrate(&models.Subscription{}); err != nil {
-		log.WithError(err).Error("Failed to auto migrate")
-		return err
+	sqlDB, err := db.DB.DB()
+	if err != nil {
+		return fmt.Errorf("failed to get sql.DB: %w", err)
 	}
 
-	// Run SQL migrations
-	migrationFiles := []string{
-		"internal/migrations/001_create_subscriptions_table.sql",
+	// Оставляем структуру пустой, так как дефолтные настройки подходят
+	// и это гарантирует успешную компиляцию
+	driver, err := migratepostgres.WithInstance(sqlDB, &migratepostgres.Config{})
+	if err != nil {
+		return fmt.Errorf("failed to create migrate driver: %w", err)
 	}
 
-	for _, file := range migrationFiles {
-		migrationSQL, err := ioutil.ReadFile(file)
-		if err != nil {
-			log.WithError(err).Warnf("Failed to read migration file: %s", file)
-			continue
-		}
-
-		statements := strings.Split(string(migrationSQL), ";")
-		for _, stmt := range statements {
-			stmt = strings.TrimSpace(stmt)
-			if stmt == "" {
-				continue
-			}
-
-			if err := db.Exec(stmt).Error; err != nil {
-				// Ignore "already exists" errors
-				if !strings.Contains(err.Error(), "already exists") {
-					log.WithError(err).Warnf("Failed to execute migration: %s", stmt)
-				}
-			}
-		}
+	m, err := migrate.NewWithDatabaseInstance(
+		"file://internal/migrations",
+		"postgres",
+		driver,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to initialize migrate instance: %w", err)
 	}
+
+	// Выполняем накат миграций
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		log.WithError(err).Error("Migration execution failed")
+		return fmt.Errorf("migration up failed: %w", err)
+	}
+
+	// ВАЖНО: Мы НЕ вызываем m.Close().
+	// Это предотвращает закрытие sqlDB для последующего запуска HTTP-сервера GORM.
 
 	log.Info("Migrations completed successfully")
 	return nil

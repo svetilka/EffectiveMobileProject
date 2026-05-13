@@ -2,21 +2,26 @@ services:
   postgres:
     image: postgres:15-alpine
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres123
-      POSTGRES_DB: subscriptions
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres123}
+      POSTGRES_DB: ${DB_NAME:-subscriptions}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432" # Безопасность: доступ к БД открыт только локально на хосте
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - subscription-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-subscriptions}"]
+      interval: 5s # Быстрее проверяем базу при холодном старте
+      timeout: 3s
       retries: 5
+    restart: unless-stopped
 
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     env_file:
       - .env 
     ports:
@@ -25,16 +30,14 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres123
-      DB_NAME: subscriptions
-      DB_SSLMODE: disable
-      SERVER_PORT: 8080
-      LOG_LEVEL: info
-    volumes:
-      - ./internal/migrations:/root/migrations
+      - DB_HOST=postgres
+    networks:
+      - subscription-network
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+
+networks:
+  subscription-network:
+    driver: bridge

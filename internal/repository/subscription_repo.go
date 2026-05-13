@@ -2,12 +2,9 @@ package repository
 
 import (
 	"fmt"
-	"time"
 
-	"github.com/svetilka/EffectiveMobileProject/internal/models"
-
-	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
+	"github.com/svetilka/EffectiveMobileProject/internal/models"
 	"gorm.io/gorm"
 )
 
@@ -58,14 +55,11 @@ func (r *SubscriptionRepository) List(filter models.SubscriptionFilter, limit, o
 
 	query := r.db.Model(&models.Subscription{})
 
-	if filter.UserID != "" {
-		userUUID, err := uuid.Parse(filter.UserID)
-		if err == nil {
-			query = query.Where("user_id = ?", userUUID)
-		}
+	if filter.UserID != nil {
+		query = query.Where("user_id = ?", filter.UserID)
 	}
 
-	if filter.ServiceName != "" {
+	if filter.ServiceName != nil {
 		query = query.Where("service_name = ?", filter.ServiceName)
 	}
 
@@ -116,27 +110,24 @@ func (r *SubscriptionRepository) Delete(id uint) error {
 	return nil
 }
 
-func (r *SubscriptionRepository) CalculateTotalCost(startDate, endDate time.Time, userID string, serviceName string) (int, error) {
+func (r *SubscriptionRepository) CalculateTotalCost(filter *models.SubscriptionFilter) (int, error) {
 	log.WithFields(log.Fields{
-		"start_date":   startDate,
-		"end_date":     endDate,
-		"user_id":      userID,
-		"service_name": serviceName,
+		"start_date":   filter.StartDate,
+		"end_date":     filter.EndDate,
+		"user_id":      filter.UserID,
+		"service_name": filter.ServiceName,
 	}).Info("Calculating total cost")
 
 	query := r.db.Model(&models.Subscription{}).
-		Where("start_date <= ?", endDate).
-		Where("end_date IS NULL OR end_date >= ?", startDate)
+		Where("start_date <= ?", filter.EndDate).
+		Where("end_date IS NULL OR end_date >= ?", filter.StartDate)
 
-	if userID != "" {
-		userUUID, err := uuid.Parse(userID)
-		if err == nil {
-			query = query.Where("user_id = ?", userUUID)
-		}
+	if filter.UserID != nil {
+		query = query.Where("user_id = ?", filter.UserID)
 	}
 
-	if serviceName != "" {
-		query = query.Where("service_name = ?", serviceName)
+	if filter.ServiceName != nil {
+		query = query.Where("service_name = ?", filter.ServiceName)
 	}
 
 	var totalCost int64
@@ -147,7 +138,7 @@ func (r *SubscriptionRepository) CalculateTotalCost(startDate, endDate time.Time
 
 	log.WithFields(log.Fields{
 		"total_cost": totalCost,
-		"period":     fmt.Sprintf("%s to %s", startDate.Format("2006-01-02"), endDate.Format("2006-01-02")),
+		"period":     fmt.Sprintf("%s to %s", filter.StartDate.Format("2006-01-02"), filter.EndDate.Format("2006-01-02")),
 	}).Info("Total cost calculated")
 
 	return int(totalCost), nil
